@@ -100,24 +100,24 @@ static const struct feat_props {
     unsigned int cos_num;
 
     /*
-     * An array to save all 'enum cbm_type' values of the feature. It is
+     * An array to save all 'enum psr_val_type' values of the feature. It is
      * used with cos_num together to get/write a feature's COS registers
      * values one by one.
      */
-    enum cbm_type type[MAX_COS_NUM];
+    enum psr_val_type type[MAX_COS_NUM];
 
     /*
      * alt_type is 'alternative type'. When this 'alt_type' is input, the
      * feature does some special operations.
      */
-    enum cbm_type alt_type;
+    enum psr_val_type alt_type;
 
     /* get_feat_info is used to return feature HW info through sysctl. */
     bool (*get_feat_info)(const struct feat_node *feat,
                           uint32_t data[], unsigned int array_len);
 
     /* write_msr is used to write out feature MSR register. */
-    void (*write_msr)(unsigned int cos, uint32_t val, enum cbm_type type);
+    void (*write_msr)(unsigned int cos, uint32_t val, enum psr_val_type type);
 } *feat_props[FEAT_TYPE_NUM];
 
 /*
@@ -216,13 +216,13 @@ static void free_socket_resources(unsigned int socket)
     bitmap_zero(info->dom_set, DOMID_IDLE + 1);
 }
 
-static enum psr_feat_type psr_cbm_type_to_feat_type(enum cbm_type type)
+static enum psr_feat_type psr_val_type_to_feat_type(enum psr_val_type type)
 {
     enum psr_feat_type feat_type = FEAT_TYPE_UNKNOWN;
 
     switch ( type )
     {
-    case PSR_CBM_TYPE_L3:
+    case PSR_VAL_TYPE_L3:
         feat_type = FEAT_TYPE_L3_CAT;
 
         /*
@@ -234,12 +234,12 @@ static enum psr_feat_type psr_cbm_type_to_feat_type(enum cbm_type type)
 
         break;
 
-    case PSR_CBM_TYPE_L3_DATA:
-    case PSR_CBM_TYPE_L3_CODE:
+    case PSR_VAL_TYPE_L3_DATA:
+    case PSR_VAL_TYPE_L3_CODE:
         feat_type = FEAT_TYPE_L3_CDP;
         break;
 
-    case PSR_CBM_TYPE_L2:
+    case PSR_VAL_TYPE_L2:
         feat_type = FEAT_TYPE_L2_CAT;
         break;
 
@@ -363,15 +363,16 @@ static bool cat_get_feat_info(const struct feat_node *feat,
 }
 
 /* L3 CAT props */
-static void l3_cat_write_msr(unsigned int cos, uint32_t val, enum cbm_type type)
+static void l3_cat_write_msr(unsigned int cos, uint32_t val,
+                             enum psr_val_type type)
 {
     wrmsrl(MSR_IA32_PSR_L3_MASK(cos), val);
 }
 
 static const struct feat_props l3_cat_props = {
     .cos_num = 1,
-    .type[0] = PSR_CBM_TYPE_L3,
-    .alt_type = PSR_CBM_TYPE_UNKNOWN,
+    .type[0] = PSR_VAL_TYPE_L3,
+    .alt_type = PSR_VAL_TYPE_UNKNOWN,
     .get_feat_info = cat_get_feat_info,
     .write_msr = l3_cat_write_msr,
 };
@@ -388,9 +389,10 @@ static bool l3_cdp_get_feat_info(const struct feat_node *feat,
     return true;
 }
 
-static void l3_cdp_write_msr(unsigned int cos, uint32_t val, enum cbm_type type)
+static void l3_cdp_write_msr(unsigned int cos, uint32_t val,
+                             enum psr_val_type type)
 {
-    wrmsrl(((type == PSR_CBM_TYPE_L3_DATA) ?
+    wrmsrl(((type == PSR_VAL_TYPE_L3_DATA) ?
             MSR_IA32_PSR_L3_MASK_DATA(cos) :
             MSR_IA32_PSR_L3_MASK_CODE(cos)),
            val);
@@ -398,23 +400,24 @@ static void l3_cdp_write_msr(unsigned int cos, uint32_t val, enum cbm_type type)
 
 static const struct feat_props l3_cdp_props = {
     .cos_num = 2,
-    .type[0] = PSR_CBM_TYPE_L3_DATA,
-    .type[1] = PSR_CBM_TYPE_L3_CODE,
-    .alt_type = PSR_CBM_TYPE_L3,
+    .type[0] = PSR_VAL_TYPE_L3_DATA,
+    .type[1] = PSR_VAL_TYPE_L3_CODE,
+    .alt_type = PSR_VAL_TYPE_L3,
     .get_feat_info = l3_cdp_get_feat_info,
     .write_msr = l3_cdp_write_msr,
 };
 
 /* L2 CAT props */
-static void l2_cat_write_msr(unsigned int cos, uint32_t val, enum cbm_type type)
+static void l2_cat_write_msr(unsigned int cos, uint32_t val,
+                             enum psr_val_type type)
 {
     wrmsrl(MSR_IA32_PSR_L2_MASK(cos), val);
 }
 
 static const struct feat_props l2_cat_props = {
     .cos_num = 1,
-    .type[0] = PSR_CBM_TYPE_L2,
-    .alt_type = PSR_CBM_TYPE_UNKNOWN,
+    .type[0] = PSR_VAL_TYPE_L2,
+    .alt_type = PSR_VAL_TYPE_UNKNOWN,
     .get_feat_info = cat_get_feat_info,
     .write_msr = l2_cat_write_msr,
 };
@@ -655,7 +658,7 @@ static struct psr_socket_info *get_socket_info(unsigned int socket)
     return socket_info + socket;
 }
 
-int psr_get_info(unsigned int socket, enum cbm_type type,
+int psr_get_info(unsigned int socket, enum psr_val_type type,
                  uint32_t data[], unsigned int array_len)
 {
     const struct psr_socket_info *info = get_socket_info(socket);
@@ -667,7 +670,7 @@ int psr_get_info(unsigned int socket, enum cbm_type type,
     if ( IS_ERR(info) )
         return PTR_ERR(info);
 
-    feat_type = psr_cbm_type_to_feat_type(type);
+    feat_type = psr_val_type_to_feat_type(type);
     if ( feat_type >= ARRAY_SIZE(info->features) )
         return -ENOENT;
 
@@ -688,7 +691,7 @@ int psr_get_info(unsigned int socket, enum cbm_type type,
 }
 
 int psr_get_val(struct domain *d, unsigned int socket,
-                uint32_t *val, enum cbm_type type)
+                uint32_t *val, enum psr_val_type type)
 {
     const struct psr_socket_info *info = get_socket_info(socket);
     const struct feat_node *feat;
@@ -700,7 +703,7 @@ int psr_get_val(struct domain *d, unsigned int socket,
     if ( IS_ERR(info) )
         return PTR_ERR(info);
 
-    feat_type = psr_cbm_type_to_feat_type(type);
+    feat_type = psr_val_type_to_feat_type(type);
     if ( feat_type >= ARRAY_SIZE(info->features) )
         return -ENOENT;
 
@@ -830,7 +833,7 @@ static int insert_val_into_array(uint32_t val[],
                                  unsigned int array_len,
                                  const struct psr_socket_info *info,
                                  enum psr_feat_type feat_type,
-                                 enum cbm_type type,
+                                 enum psr_val_type type,
                                  uint32_t new_val)
 {
     const struct feat_node *feat;
@@ -866,7 +869,7 @@ static int insert_val_into_array(uint32_t val[],
     /*
      * Value setting position is same as feature array.
      * For CDP, user may set both DATA and CODE to same value. For such case,
-     * user input 'PSR_CBM_TYPE_L3' as type. The alternative type of CDP is same
+     * user input 'PSR_VAL_TYPE_L3' as type. The alternative type of CDP is same
      * as it. So we should set new_val to both of DATA and CODE under such case.
      */
     for ( i = 0; i < props->cos_num; i++ )
@@ -1156,7 +1159,7 @@ static int write_psr_msrs(unsigned int socket, unsigned int cos,
 }
 
 int psr_set_val(struct domain *d, unsigned int socket,
-                uint64_t new_val, enum cbm_type type)
+                uint64_t new_val, enum psr_val_type type)
 {
     unsigned int old_cos, array_len;
     int cos, ret;
@@ -1172,7 +1175,7 @@ int psr_set_val(struct domain *d, unsigned int socket,
     if ( new_val != val )
         return -EINVAL;
 
-    feat_type = psr_cbm_type_to_feat_type(type);
+    feat_type = psr_val_type_to_feat_type(type);
     if ( feat_type >= ARRAY_SIZE(info->features) ||
          !info->features[feat_type] )
         return -ENOENT;
