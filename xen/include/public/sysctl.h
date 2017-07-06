@@ -745,7 +745,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_sysctl_pcitopoinfo_t);
 
 #define XEN_SYSCTL_PSR_CAT_get_l3_info               0
 #define XEN_SYSCTL_PSR_CAT_get_l2_info               1
-struct xen_sysctl_psr_cat_op {
+struct xen_sysctl_psr_alloc_op {
     uint32_t cmd;       /* IN: XEN_SYSCTL_PSR_CAT_* */
     uint32_t target;    /* IN */
     union {
@@ -757,8 +757,8 @@ struct xen_sysctl_psr_cat_op {
         } cat_info;
     } u;
 };
-typedef struct xen_sysctl_psr_cat_op xen_sysctl_psr_cat_op_t;
-DEFINE_XEN_GUEST_HANDLE(xen_sysctl_psr_cat_op_t);
+typedef struct xen_sysctl_psr_alloc_op xen_sysctl_psr_alloc_op_t;
+DEFINE_XEN_GUEST_HANDLE(xen_sysctl_psr_alloc_op_t);
 
 #define XEN_SYSCTL_TMEM_OP_ALL_CLIENTS 0xFFFFU
 
@@ -1119,7 +1119,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_gcov_op                       20
 #define XEN_SYSCTL_psr_cmt_op                    21
 #define XEN_SYSCTL_pcitopoinfo                   22
-#define XEN_SYSCTL_psr_cat_op                    23
+#define XEN_SYSCTL_psr_alloc_op                  23
 #define XEN_SYSCTL_tmem_op                       24
 #define XEN_SYSCTL_get_cpu_levelling_caps        25
 #define XEN_SYSCTL_get_cpu_featureset            26
@@ -1147,7 +1147,7 @@ struct xen_sysctl {
         struct xen_sysctl_scheduler_op      scheduler_op;
         struct xen_sysctl_gcov_op           gcov_op;
         struct xen_sysctl_psr_cmt_op        psr_cmt_op;
-        struct xen_sysctl_psr_cat_op        psr_cat_op;
+        struct xen_sysctl_psr_alloc_op      psr_alloc_op;
         struct xen_sysctl_tmem_op           tmem_op;
         struct xen_sysctl_cpu_levelling_caps cpu_levelling_caps;
         struct xen_sysctl_cpu_featureset    cpu_featureset;
