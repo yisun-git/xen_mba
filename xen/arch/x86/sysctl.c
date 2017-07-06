@@ -214,6 +214,25 @@ long arch_do_sysctl(
             break;
         }
 
+        case XEN_SYSCTL_PSR_ALLOC_get_mba_info:
+        {
+            ret = psr_get_info(sysctl->u.psr_alloc.target,
+                               PSR_TYPE_MBA_THRTL, data, ARRAY_SIZE(data));
+            if ( ret )
+                break;
+
+            sysctl->u.psr_alloc.u.mba_info.cos_max =
+                                      data[PSR_INFO_IDX_COS_MAX];
+            sysctl->u.psr_alloc.u.mba_info.thrtl_max =
+                                      data[PSR_INFO_IDX_MBA_THRTL_MAX];
+            sysctl->u.psr_alloc.u.mba_info.flags =
+                                      data[PSR_INFO_IDX_MBA_FLAG];
+
+            if ( __copy_field_to_guest(u_sysctl, sysctl, u.psr_alloc) )
+                ret = -EFAULT;
+            break;
+        }
+
         default:
             ret = -EOPNOTSUPP;
             break;
