@@ -524,6 +524,9 @@ struct cmd_spec cmd_table[] = {
       "[options]",
       "-m, --cmt       Show Cache Monitoring Technology (CMT) hardware info\n"
       "-a, --cat       Show Cache Allocation Technology (CAT) hardware info\n"
+#ifdef LIBXL_HAVE_PSR_MBA
+      "-b, --mba       Show Memory Bandwidth Allocation (MBA) hardware info\n"
+#endif
     },
     { "psr-cmt-attach",
       &main_psr_cmt_attach, 0, 1,
