@@ -479,6 +479,33 @@ static int psr_l2_cat_hwinfo(void)
     return rc;
 }
 
+static int psr_mba_hwinfo(void)
+{
+    int rc;
+    unsigned int i, nr;
+    libxl_psr_hw_info *info;
+
+    rc = libxl_psr_get_hw_info(ctx, &info, &nr,
+                               LIBXL_PSR_FEAT_TYPE_MBA_INFO, 0);
+    if (rc)
+        return rc;
+
+    printf("Memory Bandwidth Allocation (MBA):\n");
+
+    for (i = 0; i < nr; i++) {
+        printf("%-16s: %u\n", "Socket ID", info[i].id);
+        printf("%-16s: %s\n", "Linear Mode",
+               info[i].u.mba_info.linear ? "Enabled" : "Disabled");
+        printf("%-16s: %u\n", "Maximum COS", info[i].u.mba_info.cos_max);
+        printf("%-16s: %u\n", "Maximum Throttling Value",
+               info[i].u.mba_info.thrtl_max);
+        printf("%-16s: %u\n", "Default Throttling Value", 0);
+    }
+
+    libxl_psr_hw_info_list_free(info, nr);
+    return rc;
+}
+
 int main_psr_cat_cbm_set(int argc, char **argv)
 {
     uint32_t domid;
@@ -597,19 +624,23 @@ int main_psr_cat_show(int argc, char **argv)
 int main_psr_hwinfo(int argc, char **argv)
 {
     int opt, ret = 0;
-    bool all = true, cmt = false, cat = false;
+    bool all = true, cmt = false, cat = false, mba = false;
     static struct option opts[] = {
         {"cmt", 0, 0, 'm'},
         {"cat", 0, 0, 'a'},
+        {"mba", 0, 0, 'b'},
         COMMON_LONG_OPTS
     };
 
-    SWITCH_FOREACH_OPT(opt, "ma", opts, "psr-hwinfo", 0) {
+    SWITCH_FOREACH_OPT(opt, "mab", opts, "psr-hwinfo", 0) {
     case 'm':
         all = false; cmt = true;
         break;
     case 'a':
         all = false; cat = true;
+        break;
+    case 'b':
+        all = false; mba = true;
         break;
     }
 
@@ -622,6 +653,10 @@ int main_psr_hwinfo(int argc, char **argv)
     /* L2 CAT is independent of CMT and L3 CAT */
     if (all || cat)
         ret = psr_l2_cat_hwinfo();
+
+    /* MBA is independent of CMT and CAT */
+    if (all || mba)
+        ret = psr_mba_hwinfo();
 
     return ret;
 }

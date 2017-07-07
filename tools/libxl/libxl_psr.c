@@ -361,47 +361,49 @@ int libxl_psr_cat_get_cbm(libxl_ctx *ctx, uint32_t domid,
     return rc;
 }
 
+static inline int libxl__psr_hw_info_to_libxl_psr_cat_info(
+                      libxl_psr_feat_type type, libxl_psr_hw_info *hw_info,
+                      libxl_psr_cat_info *cat_info)
+{
+    if (type != LIBXL_PSR_FEAT_TYPE_CAT_INFO)
+        return ERROR_INVAL;
+
+    cat_info->id = hw_info->id;
+    cat_info->cos_max = hw_info->u.cat_info.cos_max;
+    cat_info->cbm_len = hw_info->u.cat_info.cbm_len;
+    cat_info->cdp_enabled = hw_info->u.cat_info.cdp_enabled;
+
+    return 0;
+}
+
 int libxl_psr_cat_get_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
                            int *nr, unsigned int lvl)
 {
     GC_INIT(ctx);
     int rc;
-    int i = 0, socketid, nr_sockets;
-    libxl_bitmap socketmap;
+    unsigned int i;
+    libxl_psr_hw_info *hw_info;
     libxl_psr_cat_info *ptr;
 
-    libxl_bitmap_init(&socketmap);
-
-    rc = libxl__count_physical_sockets(gc, &nr_sockets);
-    if (rc) {
-        LOGE(ERROR, "failed to get system socket count");
+    rc = libxl_psr_get_hw_info(ctx, &hw_info, (unsigned int *)nr,
+                               LIBXL_PSR_FEAT_TYPE_CAT_INFO, lvl);
+    if (rc)
         goto out;
-    }
 
-    libxl_socket_bitmap_alloc(ctx, &socketmap, nr_sockets);
-    rc = libxl_get_online_socketmap(ctx, &socketmap);
-    if (rc < 0) {
-        LOGE(ERROR, "failed to get available sockets");
-        goto out;
-    }
+    ptr = libxl__malloc(NOGC, *nr * sizeof(libxl_psr_cat_info));
 
-    ptr = libxl__malloc(NOGC, nr_sockets * sizeof(libxl_psr_cat_info));
-
-    libxl_for_each_set_bit(socketid, socketmap) {
-        ptr[i].id = socketid;
-        if (xc_psr_cat_get_info(ctx->xch, socketid, lvl, &ptr[i].cos_max,
-                                &ptr[i].cbm_len, &ptr[i].cdp_enabled)) {
+    for (i = 0; i < *nr; i++) {
+        if (libxl__psr_hw_info_to_libxl_psr_cat_info(
+                    LIBXL_PSR_FEAT_TYPE_CAT_INFO,
+                    &hw_info[i], &ptr[i])) {
             rc = ERROR_FAIL;
             free(ptr);
             goto out;
         }
-        i++;
     }
 
     *info = ptr;
-    *nr = i;
 out:
-    libxl_bitmap_dispose(&socketmap);
     GC_FREE;
     return rc;
 }
@@ -439,15 +441,120 @@ int libxl_psr_get_val(libxl_ctx *ctx, uint32_t domid,
     return ERROR_FAIL;
 }
 
+static inline xc_psr_feat_type libxl__psr_feat_type_to_libxc_psr_feat_type(
+                                   libxl_psr_feat_type type, unsigned int lvl)
+{
+    xc_psr_feat_type xc_type = XC_PSR_FEAT_UNKNOWN;
+
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT_INFO:
+        if (lvl == 3)
+            xc_type = XC_PSR_FEAT_CAT_L3;
+        if (lvl == 2)
+            xc_type = XC_PSR_FEAT_CAT_L2;
+        break;
+    case LIBXL_PSR_FEAT_TYPE_MBA_INFO:
+        xc_type = XC_PSR_FEAT_MBA;
+    default:
+        break;
+    }
+
+    return xc_type;
+}
+
+static inline int libxc__psr_hw_info_to_libxl_psr_hw_info(
+                      libxl_psr_feat_type type, xc_psr_hw_info *xc_hw_info,
+                      libxl_psr_hw_info *xl_hw_info)
+{
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT_INFO:
+        xl_hw_info->u.cat_info.cos_max = xc_hw_info->u.xc_cat_info.cos_max;
+        xl_hw_info->u.cat_info.cbm_len = xc_hw_info->u.xc_cat_info.cbm_len;
+        xl_hw_info->u.cat_info.cdp_enabled =
+                                        xc_hw_info->u.xc_cat_info.cdp_enabled;
+        break;
+    case LIBXL_PSR_FEAT_TYPE_MBA_INFO:
+        xl_hw_info->u.mba_info.cos_max = xc_hw_info->u.xc_mba_info.cos_max;
+        xl_hw_info->u.mba_info.thrtl_max = xc_hw_info->u.xc_mba_info.thrtl_max;
+        xl_hw_info->u.mba_info.linear = xc_hw_info->u.xc_mba_info.linear;
+        break;
+    default:
+        return ERROR_INVAL;
+    }
+
+    return 0;
+}
+
 int libxl_psr_get_hw_info(libxl_ctx *ctx, libxl_psr_hw_info **info,
                           unsigned int *nr, libxl_psr_feat_type type,
                           unsigned int lvl)
 {
-    return ERROR_FAIL;
+    GC_INIT(ctx);
+    int rc, nr_sockets;
+    unsigned int i = 0, socketid;
+    libxl_bitmap socketmap;
+    libxl_psr_hw_info *ptr;
+    xc_psr_feat_type xc_type;
+    xc_psr_hw_info hw_info;
+
+    libxl_bitmap_init(&socketmap);
+
+    if (type == LIBXL_PSR_FEAT_TYPE_CAT_INFO && lvl != 3 && lvl != 2) {
+        LOGE(ERROR, "input lvl %d is wrong!\n", lvl);
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    xc_type = libxl__psr_feat_type_to_libxc_psr_feat_type(type, lvl);
+
+    rc = libxl__count_physical_sockets(gc, &nr_sockets);
+    if (rc) {
+        LOGE(ERROR, "failed to get system socket count");
+        goto out;
+    }
+
+    libxl_socket_bitmap_alloc(ctx, &socketmap, nr_sockets);
+    rc = libxl_get_online_socketmap(ctx, &socketmap);
+    if (rc < 0) {
+        LOGE(ERROR, "failed to get available sockets");
+        goto out;
+    }
+
+    ptr = libxl__malloc(NOGC, nr_sockets * sizeof(libxl_psr_hw_info));
+
+    libxl_for_each_set_bit(socketid, socketmap) {
+        ptr[i].id = socketid;
+        if (xc_psr_get_hw_info(ctx->xch, socketid, xc_type, &hw_info)) {
+            rc = ERROR_FAIL;
+            free(ptr);
+            goto out;
+        }
+
+        if (libxc__psr_hw_info_to_libxl_psr_hw_info(type, &hw_info, &ptr[i])) {
+            LOGE(ERROR, "Input type %d is wrong!\n", type);
+            rc = ERROR_FAIL;
+            free(ptr);
+            goto out;
+        }
+
+        i++;
+    }
+
+    *info = ptr;
+    *nr = i;
+out:
+    libxl_bitmap_dispose(&socketmap);
+    GC_FREE;
+    return rc;
 }
 
 void libxl_psr_hw_info_list_free(libxl_psr_hw_info *list, unsigned int nr)
 {
+    unsigned int i;
+
+    for (i = 0; i < nr; i++)
+        libxl_psr_hw_info_dispose(&list[i]);
+    free(list);
 }
 
 /*
