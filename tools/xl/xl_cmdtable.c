@@ -564,8 +564,15 @@ struct cmd_spec cmd_table[] = {
       "[options] <Domain>",
       "-l <level>        Specify the cache level to process, otherwise L3 cache is processed\n"
     },
+#ifdef LIBXL_HAVE_PSR_MBA
+    { "psr-mba-show",
+      &main_psr_mba_show, 0, 1,
+      "Show Memory Bandwidth Allocation information",
+      "<Domain>",
+    },
 
-#endif
+#endif /* LIBXL_HAVE_PSR_MBA */
+#endif /* LIBXL_HAVE_PSR_CAT */
     { "usbctrl-attach",
       &main_usbctrl_attach, 0, 1,
       "Create a virtual USB controller for a domain",

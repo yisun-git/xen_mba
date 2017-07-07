@@ -330,129 +330,6 @@ out:
     return rc;
 }
 
-static void psr_cat_print_one_domain_cbm_type(uint32_t domid, uint32_t socketid,
-                                              libxl_psr_cbm_type type)
-{
-    uint64_t cbm;
-
-    if (!libxl_psr_cat_get_cbm(ctx, domid, type, socketid, &cbm))
-        printf("%#16"PRIx64, cbm);
-    else
-        printf("%16s", "error");
-}
-
-static void psr_cat_print_one_domain_cbm(uint32_t domid, uint32_t socketid,
-                                         bool cdp_enabled, unsigned int lvl)
-{
-    char *domain_name;
-
-    domain_name = libxl_domid_to_name(ctx, domid);
-    printf("%5d%25s", domid, domain_name);
-    free(domain_name);
-
-    switch (lvl) {
-    case 3:
-        if (!cdp_enabled) {
-            psr_cat_print_one_domain_cbm_type(domid, socketid,
-                                              LIBXL_PSR_CBM_TYPE_L3_CBM);
-        } else {
-            psr_cat_print_one_domain_cbm_type(domid, socketid,
-                                              LIBXL_PSR_CBM_TYPE_L3_CBM_CODE);
-            psr_cat_print_one_domain_cbm_type(domid, socketid,
-                                              LIBXL_PSR_CBM_TYPE_L3_CBM_DATA);
-        }
-        break;
-    case 2:
-        psr_cat_print_one_domain_cbm_type(domid, socketid,
-                                          LIBXL_PSR_CBM_TYPE_L2_CBM);
-        break;
-    default:
-        printf("Input lvl %d is wrong!", lvl);
-        break;
-    }
-
-    printf("\n");
-}
-
-static int psr_cat_print_domain_cbm(uint32_t domid, uint32_t socketid,
-                                    bool cdp_enabled, unsigned int lvl)
-{
-    int i, nr_domains;
-    libxl_dominfo *list;
-
-    if (domid != INVALID_DOMID) {
-        psr_cat_print_one_domain_cbm(domid, socketid, cdp_enabled, lvl);
-        return 0;
-    }
-
-    if (!(list = libxl_list_domain(ctx, &nr_domains))) {
-        fprintf(stderr, "Failed to get domain list for cbm display\n");
-        return -1;
-    }
-
-    for (i = 0; i < nr_domains; i++)
-        psr_cat_print_one_domain_cbm(list[i].domid, socketid, cdp_enabled, lvl);
-    libxl_dominfo_list_free(list, nr_domains);
-
-    return 0;
-}
-
-static int psr_cat_print_socket(uint32_t domid, libxl_psr_cat_info *info,
-                                unsigned int lvl)
-{
-    int rc;
-    uint32_t l3_cache_size;
-
-    printf("%-16s: %u\n", "Socket ID", info->id);
-
-    /* So far, CMT only supports L3 cache. */
-    if (lvl == 3) {
-        rc = libxl_psr_cmt_get_l3_cache_size(ctx, info->id, &l3_cache_size);
-        if (rc) {
-            fprintf(stderr, "Failed to get l3 cache size for socket:%d\n",
-                    info->id);
-            return -1;
-        }
-        printf("%-16s: %uKB\n", "L3 Cache", l3_cache_size);
-    }
-
-    printf("%-16s: %#llx\n", "Default CBM", (1ull << info->cbm_len) - 1);
-    if (info->cdp_enabled)
-        printf("%5s%25s%16s%16s\n", "ID", "NAME", "CBM (code)", "CBM (data)");
-    else
-        printf("%5s%25s%16s\n", "ID", "NAME", "CBM");
-
-    return psr_cat_print_domain_cbm(domid, info->id, info->cdp_enabled, lvl);
-}
-
-static int psr_cat_show(uint32_t domid, unsigned int lvl)
-{
-    int i, nr;
-    int rc;
-    libxl_psr_cat_info *info;
-
-    if (lvl != 2 && lvl != 3) {
-        fprintf(stderr, "Input lvl %d is wrong\n", lvl);
-        return EXIT_FAILURE;
-    }
-
-    rc = libxl_psr_cat_get_info(ctx, &info, &nr, lvl);
-    if (rc) {
-        fprintf(stderr, "Failed to get %s cat info\n", (lvl == 3)?"L3":"L2");
-        return rc;
-    }
-
-    for (i = 0; i < nr; i++) {
-        rc = psr_cat_print_socket(domid, info + i, lvl);
-        if (rc)
-            goto out;
-    }
-
-out:
-    libxl_psr_cat_info_list_free(info, nr);
-    return rc;
-}
-
 static int psr_l2_cat_hwinfo(void)
 {
     int rc;
@@ -480,6 +357,17 @@ static int psr_l2_cat_hwinfo(void)
 }
 
 #ifdef LIBXL_HAVE_PSR_MBA
+static void psr_print_one_domain_val_type(uint32_t domid, uint32_t socketid,
+                                          libxl_psr_cbm_type type)
+{
+    uint64_t val;
+
+    if (!libxl_psr_get_val(ctx, domid, type, socketid, &val))
+        printf("%#16"PRIx64, val);
+    else
+        printf("%16s", "error");
+}
+
 static int psr_mba_hwinfo(void)
 {
     int rc;
@@ -507,6 +395,189 @@ static int psr_mba_hwinfo(void)
 
     libxl_psr_hw_info_list_free(info, nr);
     return rc;
+}
+
+static void psr_print_one_domain_val(uint32_t domid,
+                                     libxl_psr_hw_info *info,
+                                     libxl_psr_feat_type type,
+                                     unsigned int lvl)
+{
+    char *domain_name;
+
+    domain_name = libxl_domid_to_name(ctx, domid);
+    printf("%5d%25s", domid, domain_name);
+    free(domain_name);
+
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT_INFO:
+        switch (lvl) {
+        case 3:
+            if (!info->u.cat_info.cdp_enabled) {
+                psr_print_one_domain_val_type(domid, info->id,
+                                              LIBXL_PSR_CBM_TYPE_L3_CBM);
+            } else {
+                psr_print_one_domain_val_type(domid, info->id,
+                                              LIBXL_PSR_CBM_TYPE_L3_CBM_CODE);
+                psr_print_one_domain_val_type(domid, info->id,
+                                              LIBXL_PSR_CBM_TYPE_L3_CBM_DATA);
+            }
+            break;
+        case 2:
+            psr_print_one_domain_val_type(domid, info->id,
+                                          LIBXL_PSR_CBM_TYPE_L2_CBM);
+            break;
+        default:
+            printf("Input lvl %d is wrong!", lvl);
+        }
+        break;
+
+    case LIBXL_PSR_FEAT_TYPE_MBA_INFO:
+        psr_print_one_domain_val_type(domid, info->id,
+                                      LIBXL_PSR_CBM_TYPE_MBA_THRTL);
+        break;
+
+    default:
+        printf("\n");
+        return;
+    }
+    printf("\n");
+}
+
+static int psr_print_domain_val(uint32_t domid,
+                                libxl_psr_hw_info *info,
+                                libxl_psr_feat_type type,
+                                unsigned int lvl)
+{
+    int i, nr_domains;
+    libxl_dominfo *list;
+
+    if (domid != INVALID_DOMID) {
+        psr_print_one_domain_val(domid, info, type, lvl);
+        return 0;
+    }
+
+    if (!(list = libxl_list_domain(ctx, &nr_domains))) {
+        fprintf(stderr, "Failed to get domain list for value display\n");
+        return EXIT_FAILURE;
+    }
+
+    for (i = 0; i < nr_domains; i++)
+        psr_print_one_domain_val(list[i].domid, info, type, lvl);
+    libxl_dominfo_list_free(list, nr_domains);
+
+    return 0;
+}
+
+static int psr_print_socket(uint32_t domid,
+                            libxl_psr_hw_info *info,
+                            libxl_psr_feat_type type,
+                            unsigned int lvl)
+{
+    printf("%-16s: %u\n", "Socket ID", info->id);
+
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT_INFO:
+    {
+        int rc;
+        uint32_t l3_cache_size;
+
+        /* So far, CMT only supports L3 cache. */
+        if (lvl == 3) {
+            rc = libxl_psr_cmt_get_l3_cache_size(ctx, info->id, &l3_cache_size);
+            if (rc) {
+                fprintf(stderr, "Failed to get l3 cache size for socket:%d\n",
+                        info->id);
+                return -1;
+            }
+            printf("%-16s: %uKB\n", "L3 Cache", l3_cache_size);
+        }
+
+        printf("%-16s: %#llx\n", "Default CBM",
+               (1ull << info->u.cat_info.cbm_len) - 1);
+        if (info->u.cat_info.cdp_enabled)
+            printf("%5s%25s%16s%16s\n", "ID", "NAME", "CBM (code)", "CBM (data)");
+        else
+            printf("%5s%25s%16s\n", "ID", "NAME", "CBM");
+
+        break;
+    }
+    case LIBXL_PSR_FEAT_TYPE_MBA_INFO:
+        printf("%-16s: %u\n", "Default THRTL", 0);
+        printf("%5s%25s%16s\n", "ID", "NAME", "THRTL");
+        break;
+
+    default:
+        fprintf(stderr, "Input feature type %d is wrong\n", type);
+        return EXIT_FAILURE;
+    }
+
+    return psr_print_domain_val(domid, info, type, lvl);
+}
+
+static int psr_val_show(uint32_t domid,
+                        libxl_psr_feat_type type,
+                        unsigned int lvl)
+{
+    int i, nr;
+    int rc;
+    libxl_psr_hw_info *info;
+
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT_INFO:
+        if (lvl != 2 && lvl != 3) {
+            fprintf(stderr, "Input lvl %d is wrong\n", lvl);
+            return EXIT_FAILURE;
+        }
+        break;
+
+    case LIBXL_PSR_FEAT_TYPE_MBA_INFO:
+        if (lvl) {
+            fprintf(stderr, "Input lvl %d is wrong\n", lvl);
+            return EXIT_FAILURE;
+        }
+        break;
+
+    default:
+        fprintf(stderr, "Input feature type %d is wrong\n", type);
+        return EXIT_FAILURE;
+    }
+
+    rc = libxl_psr_get_hw_info(ctx, &info, &nr, type, lvl);
+    if (rc) {
+        fprintf(stderr, "Failed to get info\n");
+        return rc;
+    }
+
+    for (i = 0; i < nr; i++) {
+        rc = psr_print_socket(domid, info + i, type, lvl);
+        if (rc)
+            goto out;
+    }
+
+out:
+    libxl_psr_hw_info_list_free(info, nr);
+    return rc;
+}
+
+int main_psr_mba_show(int argc, char **argv)
+{
+    int opt;
+    uint32_t domid;
+
+    SWITCH_FOREACH_OPT(opt, "", NULL, "psr-mba-show", 0) {
+        /* No options */
+    }
+
+    if (optind >= argc)
+        domid = INVALID_DOMID;
+    else if (optind == argc - 1)
+        domid = find_domain(argv[optind]);
+    else {
+        help("psr-mba-show");
+        return 2;
+    }
+
+    return psr_val_show(domid, LIBXL_PSR_FEAT_TYPE_MBA_INFO, 0);
 }
 #endif
 
@@ -622,7 +693,7 @@ int main_psr_cat_show(int argc, char **argv)
         return 2;
     }
 
-    return psr_cat_show(domid, lvl);
+    return psr_val_show(domid, LIBXL_PSR_FEAT_TYPE_CAT_INFO, lvl);
 }
 
 int main_psr_hwinfo(int argc, char **argv)
