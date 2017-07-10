@@ -207,6 +207,7 @@ int main_psr_cmt_show(int argc, char **argv);
 int main_psr_cat_cbm_set(int argc, char **argv);
 int main_psr_cat_show(int argc, char **argv);
 #ifdef LIBXL_HAVE_PSR_MBA
+int main_psr_mba_set(int argc, char **argv);
 int main_psr_mba_show(int argc, char **argv);
 #endif
 #endif

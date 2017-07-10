@@ -565,6 +565,12 @@ struct cmd_spec cmd_table[] = {
       "-l <level>        Specify the cache level to process, otherwise L3 cache is processed\n"
     },
 #ifdef LIBXL_HAVE_PSR_MBA
+    { "psr-mba-set",
+      &main_psr_mba_set, 0, 1,
+      "Set throttling value (THRTL) for a domain",
+      "[options] <Domain> <THRTL>",
+      "-s <socket>       Specify the socket to process, otherwise all sockets are processed\n"
+    },
     { "psr-mba-show",
       &main_psr_mba_show, 0, 1,
       "Show Memory Bandwidth Allocation information",
