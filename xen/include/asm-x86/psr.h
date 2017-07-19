@@ -24,6 +24,7 @@
 /* Resource Type Enumeration */
 #define PSR_RESOURCE_TYPE_L3            0x2
 #define PSR_RESOURCE_TYPE_L2            0x4
+#define PSR_RESOURCE_TYPE_MBA           0x8
 
 /* L3 Monitoring Features */
 #define PSR_CMT_L3_OCCUPANCY            0x1
@@ -58,6 +59,7 @@ enum psr_val_type {
     PSR_VAL_TYPE_L3_CODE,
     PSR_VAL_TYPE_L3_DATA,
     PSR_VAL_TYPE_L2,
+    PSR_VAL_TYPE_MBA,
     PSR_VAL_TYPE_UNKNOWN,
 };
 
