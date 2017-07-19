@@ -931,6 +931,13 @@ void libxl_mac_copy(libxl_ctx *ctx, libxl_mac *dst, const libxl_mac *src);
 #define LIBXL_HAVE_PSR_L2_CAT 1
 
 /*
+ * LIBXL_HAVE_PSR_MBA
+ *
+ * If this is defined, the Memory Bandwidth Allocation feature is supported.
+ */
+#define LIBXL_HAVE_PSR_MBA 1
+
+/*
  * LIBXL_HAVE_MCA_CAPS
  *
  * If this is defined, setting MCA capabilities for HVM domain is supported.
@@ -2219,7 +2226,33 @@ int libxl_psr_cat_get_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
 int libxl_psr_cat_get_l3_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
                               int *nr);
 void libxl_psr_cat_info_list_free(libxl_psr_cat_info *list, int nr);
-#endif
+
+#ifdef LIBXL_HAVE_PSR_MBA
+/*
+ * Function to set a domain's value. It operates on a single or multiple
+ * target(s) defined in 'target_map'. 'target_map' specifies all the sockets
+ * to be operated on.
+ */
+int libxl_psr_set_val(libxl_ctx *ctx, uint32_t domid,
+                      libxl_psr_cbm_type type, libxl_bitmap *target_map,
+                      uint64_t val);
+/*
+ * Function to get a domain's cbm. It operates on a single 'target'.
+ * 'target' specifies which socket to be operated on.
+ */
+int libxl_psr_get_val(libxl_ctx *ctx, uint32_t domid,
+                      libxl_psr_cbm_type type, unsigned int target,
+                      uint64_t *val);
+/*
+ * On success, the function returns an array of elements in 'info',
+ * and the length in 'nr'.
+ */
+int libxl_psr_get_hw_info(libxl_ctx *ctx, libxl_psr_hw_info **info,
+                          unsigned int *nr, libxl_psr_feat_type type,
+                          unsigned int lvl);
+void libxl_psr_hw_info_list_free(libxl_psr_hw_info *list, unsigned int nr);
+#endif /* LIBXL_HAVE_PSR_MBA */
+#endif /* LIBXL_HAVE_PSR_CAT */
 
 /* misc */
 
