@@ -425,6 +425,30 @@ void libxl_psr_cat_info_list_free(libxl_psr_cat_info *list, int nr)
     free(list);
 }
 
+int libxl_psr_set_val(libxl_ctx *ctx, uint32_t domid,
+                      libxl_psr_cbm_type type, libxl_bitmap *target_map,
+                      uint64_t val)
+{
+    return EXIT_FAILURE;
+}
+
+int libxl_psr_get_val(libxl_ctx *ctx, uint32_t domid,
+                      libxl_psr_cbm_type type, uint32_t target,
+                      uint64_t *val)
+{
+    return EXIT_FAILURE;
+}
+
+int libxl_psr_get_hw_info(libxl_ctx *ctx, libxl_psr_hw_info **info,
+                          int *nr, libxl_psr_feat_type type, int lvl)
+{
+    return EXIT_FAILURE;
+}
+
+void libxl_psr_hw_info_list_free(libxl_psr_hw_info *list, int nr)
+{
+}
+
 /*
  * Local variables:
  * mode: C
