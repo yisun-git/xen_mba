@@ -1144,6 +1144,7 @@ struct xen_domctl_psr_alloc {
 #define XEN_DOMCTL_PSR_ALLOC_GET_L3_DATA    5
 #define XEN_DOMCTL_PSR_ALLOC_SET_L2_CBM     6
 #define XEN_DOMCTL_PSR_ALLOC_GET_L2_CBM     7
+#define XEN_DOMCTL_PSR_ALLOC_GET_MBA_THRTL  9
     uint32_t cmd;       /* IN: XEN_DOMCTL_PSR_CAT_OP_* */
     uint32_t target;    /* IN */
     uint64_t data;      /* IN/OUT */

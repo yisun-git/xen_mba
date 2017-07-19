@@ -1496,6 +1496,13 @@ long arch_do_domctl(
             copyback = true;
             break;
 
+        case XEN_DOMCTL_PSR_ALLOC_GET_MBA_THRTL:
+            ret = psr_get_val(d, domctl->u.psr_alloc.target,
+                              &val32, PSR_TYPE_MBA_THRTL);
+            domctl->u.psr_alloc.data = val32;
+            copyback = true;
+            break;
+
         default:
             ret = -EOPNOTSUPP;
             break;
