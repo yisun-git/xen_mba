@@ -136,6 +136,12 @@ static const struct feat_props {
 
     /* write_msr is used to write out feature MSR register. */
     void (*write_msr)(unsigned int cos, uint32_t val, enum psr_val_type type);
+
+    /*
+     * check_change_val is used to check if input val fulfills SDM requirement.
+     * Change it to valid value if SDM allows.
+     */
+    bool (*check_change_val)(const struct feat_node *feat, unsigned long *val);
 } *feat_props[FEAT_TYPE_NUM];
 
 /*
@@ -273,29 +279,6 @@ static enum psr_feat_type psr_val_type_to_feat_type(enum psr_val_type type)
     return feat_type;
 }
 
-static bool psr_check_cbm(unsigned int cbm_len, unsigned long cbm)
-{
-    unsigned int first_bit, zero_bit;
-
-    /* Set bits should only in the range of [0, cbm_len]. */
-    if ( cbm & (~0ul << cbm_len) )
-        return false;
-
-    /* At least one bit need to be set. */
-    if ( cbm == 0 )
-        return false;
-
-    first_bit = find_first_bit(&cbm, cbm_len);
-    zero_bit = find_next_zero_bit(&cbm, cbm_len, first_bit);
-
-    /* Set bits should be contiguous. */
-    if ( zero_bit < cbm_len &&
-         find_next_bit(&cbm, cbm_len, zero_bit) < cbm_len )
-        return false;
-
-    return true;
-}
-
 /* CAT common functions implementation. */
 static int init_alloc_features(const struct cpuid_leaf *regs,
                                struct feat_node *feat,
@@ -410,6 +393,31 @@ static bool cat_get_feat_info(const struct feat_node *feat,
     return true;
 }
 
+static bool cat_check_change_val(const struct feat_node *feat,
+                                 unsigned long *cbm)
+{
+    unsigned int first_bit, zero_bit;
+    unsigned int cbm_len = feat->cat_info.cbm_len;
+
+    /* Set bits should only in the range of [0, cbm_len]. */
+    if ( *cbm & (~0ul << cbm_len) )
+        return false;
+
+    /* At least one bit need to be set. */
+    if ( *cbm == 0 )
+        return false;
+
+    first_bit = find_first_bit(cbm, cbm_len);
+    zero_bit = find_next_zero_bit(cbm, cbm_len, first_bit);
+
+    /* Set bits should be contiguous. */
+    if ( zero_bit < cbm_len &&
+         find_next_bit(cbm, cbm_len, zero_bit) < cbm_len )
+        return false;
+
+    return true;
+}
+
 /* L3 CAT props */
 static void l3_cat_write_msr(unsigned int cos, uint32_t val,
                              enum psr_val_type type)
@@ -423,6 +431,7 @@ static const struct feat_props l3_cat_props = {
     .alt_type = PSR_VAL_TYPE_UNKNOWN,
     .get_feat_info = cat_get_feat_info,
     .write_msr = l3_cat_write_msr,
+    .check_change_val = cat_check_change_val,
 };
 
 /* L3 CDP props */
@@ -453,6 +462,7 @@ static const struct feat_props l3_cdp_props = {
     .alt_type = PSR_VAL_TYPE_L3,
     .get_feat_info = l3_cdp_get_feat_info,
     .write_msr = l3_cdp_write_msr,
+    .check_change_val = cat_check_change_val,
 };
 
 /* L2 CAT props */
@@ -468,6 +478,7 @@ static const struct feat_props l2_cat_props = {
     .alt_type = PSR_VAL_TYPE_UNKNOWN,
     .get_feat_info = cat_get_feat_info,
     .write_msr = l2_cat_write_msr,
+    .check_change_val = cat_check_change_val,
 };
 
 /* MBA props */
@@ -487,6 +498,44 @@ static bool mba_get_feat_info(const struct feat_node *feat,
 static void mba_write_msr(unsigned int cos, uint32_t val,
                           enum psr_val_type type)
 {
+    wrmsrl(MSR_IA32_PSR_MBA_MASK(cos), val);
+}
+
+static bool mba_check_change_val(const struct feat_node *feat,
+                                 unsigned long *thrtl)
+{
+    if ( *thrtl > feat->mba_info.thrtl_max )
+        return false;
+
+    /*
+     * Per SDM (chapter "Memory Bandwidth Allocation Configuration"):
+     * 1. Linear mode: In the linear mode the input precision is defined
+     *    as 100-(MBA_MAX). For instance, if the MBA_MAX value is 90, the
+     *    input precision is 10%. Values not an even multiple of the
+     *    precision (e.g., 12%) will be rounded down (e.g., to 10% delay
+     *    applied).
+     * 2. Non-linear mode: Input delay values are powers-of-two from zero
+     *    to the MBA_MAX value from CPUID. In this case any values not a
+     *    power of two will be rounded down the next nearest power of two.
+     */
+    if ( feat->mba_info.linear )
+    {
+        unsigned int mod;
+
+        if ( feat->mba_info.thrtl_max >= 100 )
+            return false;
+
+        mod = *thrtl % (100 - feat->mba_info.thrtl_max);
+        *thrtl -= mod;
+    }
+    else
+    {
+        /* Not power of 2. */
+        if ( *thrtl & (*thrtl - 1) )
+            *thrtl = *thrtl & (1 << (flsl(*thrtl) - 1));
+    }
+
+    return true;
 }
 
 static const struct feat_props mba_props = {
@@ -495,6 +544,7 @@ static const struct feat_props mba_props = {
     .alt_type = PSR_VAL_TYPE_UNKNOWN,
     .get_feat_info = mba_get_feat_info,
     .write_msr = mba_write_msr,
+    .check_change_val = mba_check_change_val,
 };
 
 static void __init parse_psr_bool(char *s, char *value, char *feature,
@@ -915,6 +965,7 @@ static int insert_val_into_array(uint32_t val[],
     const struct feat_node *feat;
     const struct feat_props *props;
     unsigned int i;
+    unsigned long check_val = new_val;
     int ret;
 
     ASSERT(feat_type < FEAT_TYPE_NUM);
@@ -939,8 +990,10 @@ static int insert_val_into_array(uint32_t val[],
     if ( array_len < props->cos_num )
         return -ENOSPC;
 
-    if ( !psr_check_cbm(feat->cat_info.cbm_len, new_val) )
+    if ( !props->check_change_val(feat, &check_val) )
         return -EINVAL;
+
+    new_val = check_val;
 
     /*
      * Value setting position is same as feature array.
@@ -1167,28 +1220,74 @@ static unsigned int get_socket_cpu(unsigned int socket)
     return nr_cpu_ids;
 }
 
+/*
+ * Because multiple features may co-exist, we need handle all features to write
+ * values of them into a COS register with new COS ID. E.g:
+ * 1. L3 CAT and MBA co-exist.
+ * 2. Dom1 and Dom2 share a same COS ID (2). The L3 CAT CBM of Dom1 is 0x1ff,
+ *    the MBA Thrtle of Dom1 is 0xa.
+ * 3. User wants to change MBA Thrtl of Dom1 to be 0x14. Because COS ID 2 is
+ *    used by Dom2 too, we have to pick a new COS ID 3. The original values of
+ *    Dom1 on COS ID 3 may be below:
+ *            ---------
+ *            | COS 3 |
+ *            ---------
+ *    L3 CAT  | 0x7ff |
+ *            ---------
+ *    MBA     | 0x0   |
+ *            ---------
+ * 4. After setting, the L3 CAT CBM value of Dom1 should be kept and the new MBA
+ *    Thrtl is set. So, the values on COS ID 3 should be below.
+ *            ---------
+ *            | COS 3 |
+ *            ---------
+ *    L3 CAT  | 0x1ff |
+ *            ---------
+ *    MBA     | 0x14  |
+ *            ---------
+ *
+ * So, we should write all features values into their MSRs. That requires the
+ * feature array, feature properties array and value array are input.
+ */
 struct cos_write_info
 {
     unsigned int cos;
-    struct feat_node *feature;
+    struct feat_node **features;
     const uint32_t *val;
-    const struct feat_props *props;
+    unsigned int array_len;
+    const struct feat_props **props;
 };
 
 static void do_write_psr_msrs(void *data)
 {
     const struct cos_write_info *info = data;
-    struct feat_node *feat = info->feature;
-    const struct feat_props *props = info->props;
-    unsigned int i, cos = info->cos, cos_num = props->cos_num;
+    unsigned int i, j, index = 0, array_len = info->array_len, cos = info->cos;
+    const uint32_t *val_array = info->val;
 
-    for ( i = 0; i < cos_num; i++ )
+    for ( i = 0; i < ARRAY_SIZE(feat_props); i++ )
     {
-        if ( feat->cos_reg_val[cos * cos_num + i] != info->val[i] )
+        struct feat_node *feat = info->features[i];
+        const struct feat_props *props = info->props[i];
+        unsigned int cos_num;
+
+        if ( !feat || !props )
+            continue;
+
+        cos_num = props->cos_num;
+        if ( array_len < cos_num )
+            return;
+
+        for ( j = 0; j < cos_num; j++ )
         {
-            feat->cos_reg_val[cos * cos_num + i] = info->val[i];
-            props->write_msr(cos, info->val[i], props->type[i]);
+            if ( feat->cos_reg_val[cos * cos_num + j] != val_array[index + j] )
+            {
+                feat->cos_reg_val[cos * cos_num + j] = val_array[index + j];
+                props->write_msr(cos, val_array[index + j], props->type[j]);
+            }
         }
+
+        array_len -= cos_num;
+        index += cos_num;
     }
 }
 
@@ -1196,29 +1295,18 @@ static int write_psr_msrs(unsigned int socket, unsigned int cos,
                           const uint32_t val[], unsigned int array_len,
                           enum psr_feat_type feat_type)
 {
-    int ret;
     struct psr_socket_info *info = get_socket_info(socket);
     struct cos_write_info data =
     {
         .cos = cos,
-        .feature = info->features[feat_type],
-        .props = feat_props[feat_type],
+        .features = info->features,
+        .val = val,
+        .array_len = array_len,
+        .props = feat_props,
     };
 
     if ( cos > info->features[feat_type]->cos_max )
         return -EINVAL;
-
-    /* Skip to the feature's value head. */
-    ret = skip_prior_features(&array_len, feat_type);
-    if ( ret < 0 )
-        return ret;
-    else
-        val += ret;
-
-    if ( array_len < feat_props[feat_type]->cos_num )
-        return -ENOSPC;
-
-    data.val = val;
 
     if ( socket == cpu_to_socket(smp_processor_id()) )
         do_write_psr_msrs(&data);
