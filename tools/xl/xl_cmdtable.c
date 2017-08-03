@@ -562,6 +562,11 @@ struct cmd_spec cmd_table[] = {
       "[options] <Domain>",
       "-l <level>        Specify the cache level to process, otherwise L3 cache is processed\n"
     },
+    { "psr-mba-show",
+      &main_psr_mba_show, 0, 1,
+      "Show Memory Bandwidth Allocation information",
+      "<Domain>",
+    },
 
 #endif
     { "usbctrl-attach",
