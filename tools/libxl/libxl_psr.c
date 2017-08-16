@@ -361,6 +361,27 @@ int libxl_psr_cat_get_cbm(libxl_ctx *ctx, uint32_t domid,
     return rc;
 }
 
+static inline xc_psr_feat_type libxl__psr_feat_type_to_libxc_psr_feat_type(
+                                   libxl_psr_feat_type type, unsigned int lvl)
+{
+    xc_psr_feat_type xc_type = XC_PSR_FEAT_UNKNOWN;
+
+    switch (type) {
+    case LIBXL_PSR_FEAT_TYPE_CAT:
+        if (lvl == 3)
+            xc_type = XC_PSR_FEAT_CAT_L3;
+        if (lvl == 2)
+            xc_type = XC_PSR_FEAT_CAT_L2;
+        break;
+    case LIBXL_PSR_FEAT_TYPE_MBA:
+        xc_type = XC_PSR_FEAT_MBA;
+    default:
+        break;
+    }
+
+    return xc_type;
+}
+
 int libxl_psr_cat_get_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
                            int *nr, unsigned int lvl)
 {
@@ -369,6 +390,8 @@ int libxl_psr_cat_get_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
     int i = 0, socketid, nr_sockets;
     libxl_bitmap socketmap;
     libxl_psr_cat_info *ptr;
+    xc_psr_hw_info hw_info;
+    xc_psr_feat_type xc_type;
 
     libxl_bitmap_init(&socketmap);
 
@@ -385,16 +408,23 @@ int libxl_psr_cat_get_info(libxl_ctx *ctx, libxl_psr_cat_info **info,
         goto out;
     }
 
+    xc_type = libxl__psr_feat_type_to_libxc_psr_feat_type(
+                  LIBXL_PSR_FEAT_TYPE_CAT, lvl);
+
     ptr = libxl__malloc(NOGC, nr_sockets * sizeof(libxl_psr_cat_info));
 
     libxl_for_each_set_bit(socketid, socketmap) {
         ptr[i].id = socketid;
-        if (xc_psr_cat_get_info(ctx->xch, socketid, lvl, &ptr[i].cos_max,
-                                &ptr[i].cbm_len, &ptr[i].cdp_enabled)) {
+        if (xc_psr_get_hw_info(ctx->xch, socketid, xc_type, &hw_info)) {
             rc = ERROR_FAIL;
             free(ptr);
             goto out;
         }
+
+        ptr[i].cos_max = hw_info.u.xc_cat_info.cos_max;
+        ptr[i].cbm_len = hw_info.u.xc_cat_info.cbm_len;
+        ptr[i].cdp_enabled = hw_info.u.xc_cat_info.cdp_enabled;
+
         i++;
     }
 
