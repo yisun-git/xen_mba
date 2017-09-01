@@ -382,7 +382,7 @@ static bool l3_cdp_get_feat_info(const struct feat_node *feat,
     if ( !cat_get_feat_info(feat, data, array_len) )
         return false;
 
-    data[PSR_INFO_IDX_CAT_FLAG] |= XEN_SYSCTL_PSR_CAT_L3_CDP;
+    data[PSR_INFO_IDX_CAT_FLAG] |= XEN_SYSCTL_PSR_L3_CDP;
 
     return true;
 }
