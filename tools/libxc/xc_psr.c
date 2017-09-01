@@ -323,36 +323,61 @@ int xc_psr_cat_get_domain_data(xc_interface *xch, uint32_t domid,
     return rc;
 }
 
-int xc_psr_cat_get_info(xc_interface *xch, uint32_t socket, unsigned int lvl,
-                        uint32_t *cos_max, uint32_t *cbm_len, bool *cdp_enabled)
+int xc_psr_get_hw_info(xc_interface *xch, uint32_t socket,
+                       xc_psr_feat_type type, xc_psr_hw_info *hw_info)
 {
     int rc = -1;
     DECLARE_SYSCTL;
 
+    if ( !hw_info )
+    {
+        errno = EINVAL;
+        return rc;
+    }
+
     sysctl.cmd = XEN_SYSCTL_psr_alloc;
     sysctl.u.psr_alloc.target = socket;
 
-    switch ( lvl )
+    switch ( type )
     {
-    case 2:
+    case XC_PSR_FEAT_CAT_L2:
         sysctl.u.psr_alloc.cmd = XEN_SYSCTL_PSR_ALLOC_get_l2_info;
         rc = xc_sysctl(xch, &sysctl);
         if ( !rc )
         {
-            *cos_max = sysctl.u.psr_alloc.u.cat_info.cos_max;
-            *cbm_len = sysctl.u.psr_alloc.u.cat_info.cbm_len;
-            *cdp_enabled = false;
+            hw_info->u.xc_cat.cos_max =
+                        sysctl.u.psr_alloc.u.cat_info.cos_max;
+            hw_info->u.xc_cat.cbm_len =
+                        sysctl.u.psr_alloc.u.cat_info.cbm_len;
+            hw_info->u.xc_cat.cdp_enabled = false;
         }
         break;
-    case 3:
+    case XC_PSR_FEAT_CAT_L3:
         sysctl.u.psr_alloc.cmd = XEN_SYSCTL_PSR_ALLOC_get_l3_info;
         rc = xc_sysctl(xch, &sysctl);
         if ( !rc )
         {
-            *cos_max = sysctl.u.psr_alloc.u.cat_info.cos_max;
-            *cbm_len = sysctl.u.psr_alloc.u.cat_info.cbm_len;
-            *cdp_enabled = sysctl.u.psr_alloc.u.cat_info.flags &
-                           XEN_SYSCTL_PSR_ALLOC_L3_CDP;
+            hw_info->u.xc_cat.cos_max =
+                        sysctl.u.psr_alloc.u.cat_info.cos_max;
+            hw_info->u.xc_cat.cbm_len =
+                        sysctl.u.psr_alloc.u.cat_info.cbm_len;
+            hw_info->u.xc_cat.cdp_enabled =
+                        sysctl.u.psr_alloc.u.cat_info.flags &
+                        XEN_SYSCTL_PSR_ALLOC_L3_CDP;
+        }
+        break;
+    case XC_PSR_FEAT_MBA:
+        sysctl.u.psr_alloc.cmd = XEN_SYSCTL_PSR_ALLOC_get_mba_info;
+        rc = xc_sysctl(xch, &sysctl);
+        if ( !rc )
+        {
+            hw_info->u.xc_mba.cos_max =
+                        sysctl.u.psr_alloc.u.mba_info.cos_max;
+            hw_info->u.xc_mba.thrtl_max =
+                        sysctl.u.psr_alloc.u.mba_info.thrtl_max;
+            hw_info->u.xc_mba.linear =
+                        sysctl.u.psr_alloc.u.mba_info.flags &
+                        XEN_SYSCTL_PSR_ALLOC_MBA_LINEAR;
         }
         break;
     default:
