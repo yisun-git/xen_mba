@@ -36,7 +36,7 @@
 #include "physdev.h"
 #include "tmem.h"
 
-#define XEN_SYSCTL_INTERFACE_VERSION 0x0000000F
+#define XEN_SYSCTL_INTERFACE_VERSION 0x00000010
 
 /*
  * Read console content from Xen buffer ring.
@@ -743,22 +743,22 @@ struct xen_sysctl_pcitopoinfo {
 typedef struct xen_sysctl_pcitopoinfo xen_sysctl_pcitopoinfo_t;
 DEFINE_XEN_GUEST_HANDLE(xen_sysctl_pcitopoinfo_t);
 
-#define XEN_SYSCTL_PSR_CAT_get_l3_info               0
-#define XEN_SYSCTL_PSR_CAT_get_l2_info               1
-struct xen_sysctl_psr_cat_op {
+#define XEN_SYSCTL_PSR_ALLOC_get_l3_info               0
+#define XEN_SYSCTL_PSR_ALLOC_get_l2_info               1
+struct xen_sysctl_psr_alloc {
     uint32_t cmd;       /* IN: XEN_SYSCTL_PSR_CAT_* */
     uint32_t target;    /* IN */
     union {
         struct {
             uint32_t cbm_len;   /* OUT: CBM length */
             uint32_t cos_max;   /* OUT: Maximum COS */
-#define XEN_SYSCTL_PSR_CAT_L3_CDP       (1u << 0)
+#define XEN_SYSCTL_PSR_ALLOC_L3_CDP       (1u << 0)
             uint32_t flags;     /* OUT: CAT flags */
         } cat_info;
     } u;
 };
-typedef struct xen_sysctl_psr_cat_op xen_sysctl_psr_cat_op_t;
-DEFINE_XEN_GUEST_HANDLE(xen_sysctl_psr_cat_op_t);
+typedef struct xen_sysctl_psr_alloc xen_sysctl_psr_alloc_t;
+DEFINE_XEN_GUEST_HANDLE(xen_sysctl_psr_alloc_t);
 
 #define XEN_SYSCTL_TMEM_OP_ALL_CLIENTS 0xFFFFU
 
@@ -1119,7 +1119,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_gcov_op                       20
 #define XEN_SYSCTL_psr_cmt_op                    21
 #define XEN_SYSCTL_pcitopoinfo                   22
-#define XEN_SYSCTL_psr_cat_op                    23
+#define XEN_SYSCTL_psr_alloc                     23
 #define XEN_SYSCTL_tmem_op                       24
 #define XEN_SYSCTL_get_cpu_levelling_caps        25
 #define XEN_SYSCTL_get_cpu_featureset            26
@@ -1147,7 +1147,7 @@ struct xen_sysctl {
         struct xen_sysctl_scheduler_op      scheduler_op;
         struct xen_sysctl_gcov_op           gcov_op;
         struct xen_sysctl_psr_cmt_op        psr_cmt_op;
-        struct xen_sysctl_psr_cat_op        psr_cat_op;
+        struct xen_sysctl_psr_alloc         psr_alloc;
         struct xen_sysctl_tmem_op           tmem_op;
         struct xen_sysctl_cpu_levelling_caps cpu_levelling_caps;
         struct xen_sysctl_cpu_featureset    cpu_featureset;

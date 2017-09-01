@@ -37,7 +37,7 @@
 #include "hvm/save.h"
 #include "memory.h"
 
-#define XEN_DOMCTL_INTERFACE_VERSION 0x0000000e
+#define XEN_DOMCTL_INTERFACE_VERSION 0x0000000f
 
 /*
  * NB. xen_domctl.domain is an IN/OUT parameter for this operation.
@@ -1135,21 +1135,21 @@ struct xen_domctl_monitor_op {
 typedef struct xen_domctl_monitor_op xen_domctl_monitor_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_domctl_monitor_op_t);
 
-struct xen_domctl_psr_cat_op {
-#define XEN_DOMCTL_PSR_CAT_OP_SET_L3_CBM     0
-#define XEN_DOMCTL_PSR_CAT_OP_GET_L3_CBM     1
-#define XEN_DOMCTL_PSR_CAT_OP_SET_L3_CODE    2
-#define XEN_DOMCTL_PSR_CAT_OP_SET_L3_DATA    3
-#define XEN_DOMCTL_PSR_CAT_OP_GET_L3_CODE    4
-#define XEN_DOMCTL_PSR_CAT_OP_GET_L3_DATA    5
-#define XEN_DOMCTL_PSR_CAT_OP_SET_L2_CBM     6
-#define XEN_DOMCTL_PSR_CAT_OP_GET_L2_CBM     7
+struct xen_domctl_psr_alloc {
+#define XEN_DOMCTL_PSR_ALLOC_SET_L3_CBM     0
+#define XEN_DOMCTL_PSR_ALLOC_GET_L3_CBM     1
+#define XEN_DOMCTL_PSR_ALLOC_SET_L3_CODE    2
+#define XEN_DOMCTL_PSR_ALLOC_SET_L3_DATA    3
+#define XEN_DOMCTL_PSR_ALLOC_GET_L3_CODE    4
+#define XEN_DOMCTL_PSR_ALLOC_GET_L3_DATA    5
+#define XEN_DOMCTL_PSR_ALLOC_SET_L2_CBM     6
+#define XEN_DOMCTL_PSR_ALLOC_GET_L2_CBM     7
     uint32_t cmd;       /* IN: XEN_DOMCTL_PSR_CAT_OP_* */
     uint32_t target;    /* IN */
     uint64_t data;      /* IN/OUT */
 };
-typedef struct xen_domctl_psr_cat_op xen_domctl_psr_cat_op_t;
-DEFINE_XEN_GUEST_HANDLE(xen_domctl_psr_cat_op_t);
+typedef struct xen_domctl_psr_alloc xen_domctl_psr_alloc_t;
+DEFINE_XEN_GUEST_HANDLE(xen_domctl_psr_alloc_t);
 
 struct xen_domctl {
     uint32_t cmd;
@@ -1226,7 +1226,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_setvnumainfo                  74
 #define XEN_DOMCTL_psr_cmt_op                    75
 #define XEN_DOMCTL_monitor_op                    77
-#define XEN_DOMCTL_psr_cat_op                    78
+#define XEN_DOMCTL_psr_alloc                     78
 #define XEN_DOMCTL_soft_reset                    79
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
@@ -1289,7 +1289,7 @@ struct xen_domctl {
         struct xen_domctl_vnuma             vnuma;
         struct xen_domctl_psr_cmt_op        psr_cmt_op;
         struct xen_domctl_monitor_op        monitor_op;
-        struct xen_domctl_psr_cat_op        psr_cat_op;
+        struct xen_domctl_psr_alloc         psr_alloc;
         uint8_t                             pad[128];
     } u;
 };
